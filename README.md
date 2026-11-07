@@ -73,62 +73,6 @@ flowchart LR
 
 The deployed application reads precomputed CSV and GeoJSON assets. It does not run the mortality models in the browser.
 
-## Repository structure
-
-- `index.qmd` — current Quarto/Observable dashboard source.
-- `styles.scss` — dashboard styling.
-- `_quarto.yml` — Quarto configuration, external libraries and navigation links.
-- `app_data/` — browser-ready summary, daily and spatial assets.
-- `_site/` — rendered static site deployed by Netlify.
-- `00_prep_static_data.R` — regenerates browser-ready tables and GeoJSON from prepared inputs.
-- `00_prep_app_data.R` — maintainer-oriented spatial preparation pipeline; some geography paths refer to the LSHTM network environment.
-- `netlify.toml` and `_headers` — deployment and caching headers.
-- `app.R`, `R/` and `www/` — legacy Shiny prototype files; they are not used by the deployed Quarto application.
-
-The `data/` directory is intentionally excluded from version control. The committed `_site/` directory contains the data assets needed to serve the current deployment.
-
-## Running the current build locally
-
-Serve the committed `_site/` directory over HTTP. For example:
-
-```bash
-cd _site
-python -m http.server 8080
-```
-
-Then open <http://localhost:8080>. Opening `_site/index.html` directly as a `file://` URL will not work reliably because the application loads data asynchronously.
-
-## Previewing or rebuilding from source
-
-To preview `index.qmd`, first create `data/` and copy these two files from the study repository's `output/` directory:
-
-- `lad_study_period.csv`
-- `lsoa_hw_period.csv`
-
-Then run:
-
-```bash
-quarto preview index.qmd
-```
-
-To regenerate the summary and daily browser assets, place the following prepared study outputs in `data/`:
-
-- `national_age_period.csv`
-- `region_age_period.csv`
-- `national_mort_daily.csv`
-- `national_t2m_daily.csv`
-- `lad_study_period.csv`
-- `lsoa_hw_period.csv`
-
-Run:
-
-```bash
-Rscript 00_prep_static_data.R
-quarto render index.qmd
-```
-
-Netlify publishes the committed `_site/` directory. After changing `index.qmd`, styles or data, render the dashboard and commit the updated `_site/` files as well as the source changes.
-
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
