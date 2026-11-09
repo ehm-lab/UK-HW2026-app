@@ -5,6 +5,7 @@
 [![MapLibre GL](https://img.shields.io/badge/MapLibre-WebGL-crimson.svg)](https://maplibre.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Netlify Status](https://api.netlify.com/api/v1/badges/2b9c4896-9ef4-4dd2-b28c-869158782464/deploy-status)](https://app.netlify.com/projects/uk-hw2026/deploys)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24084712.svg)](https://doi.org/10.5281/zenodo.24084712)
 
 An interactive dashboard presenting heat-related excess mortality associated with the record-breaking summer 2026 heatwaves in England and Wales, covering 1 May to 30 September 2026.
 
