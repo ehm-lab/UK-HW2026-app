@@ -497,6 +497,18 @@ div.sourceCode,
   border-bottom: 2px solid #cbd5e1;
 }
 
+.custom-table tr.row-region-pinned td {
+  background-color: #f1f5f9;
+  font-weight: 600;
+  border-bottom: 2px solid #94a3b8;
+}
+
+.custom-table tr.row-lad-active td {
+  background-color: #fef2f2;
+  font-weight: 600;
+  border-bottom: 2px solid #dc2626;
+}
+
 .custom-table tr:hover td {
   background-color: #fef2f2;
 }
@@ -519,6 +531,12 @@ div.sourceCode,
 .scope-region {
   background: #e2e8f0;
   color: #1e293b;
+}
+
+.scope-lad {
+  background: #fee2e2;
+  color: #990000;
+  border: 1px solid #fecaca;
 }
 
 .inline-bar-bg {

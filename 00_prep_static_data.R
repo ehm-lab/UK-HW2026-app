@@ -59,11 +59,49 @@ summary_dt[, period := period_key][, period_key := NULL]
 setcolorder(summary_dt, c("geo_level", "rgn11cd", "rgn11nm", "agegr", "age", "period", "period_label"))
 write_parquet(summary_dt, file.path(app_data_dir, "summary_estimates.parquet"))
 
+# Aggregate LAD-level estimates across age groups and periods for OJS summary_estimates.csv
+lsoa_age_study <- fread("./data/lsoa_age_study_period.csv")[agegr %in% std_ages]
+lad_study_age <- lsoa_age_study[, .(
+  population = sum(population, na.rm = TRUE),
+  estimate   = sum(estimate, na.rm = TRUE)
+), by = .(lad11cd = LAD11CD, lad11nm = LAD11NM, rgn11cd = RGN11CD, rgn11nm = RGN11NM, agegr, age)]
+lad_study_age[, `:=`(
+  geo_level    = "lad",
+  period       = "study_period",
+  period_label = period_label_map[["study_period"]],
+  rate         = (estimate / population) * 1e6,
+  lower        = NA_real_,
+  upper        = NA_real_,
+  ratelow      = NA_real_,
+  ratehigh     = NA_real_
+)]
+
+lsoa_age_hw <- fread("./data/lsoa_age_hw_period.csv")[agegr %in% std_ages]
+lad_hw_age <- lsoa_age_hw[, .(
+  population = sum(population, na.rm = TRUE),
+  estimate   = sum(estimate, na.rm = TRUE)
+), by = .(lad11cd = LAD11CD, lad11nm = LAD11NM, rgn11cd = RGN11CD, rgn11nm = RGN11NM, agegr, age, period_raw = period)]
+lad_hw_age[, period := period_map[period_raw]]
+lad_hw_age[, `:=`(
+  geo_level    = "lad",
+  period_label = period_label_map[period],
+  rate         = (estimate / population) * 1e6,
+  lower        = NA_real_,
+  upper        = NA_real_,
+  ratelow      = NA_real_,
+  ratehigh     = NA_real_,
+  period_raw   = NULL
+)]
+
+summary_csv_dt <- copy(summary_dt)[, `:=`(lad11cd = NA_character_, lad11nm = NA_character_)]
+summary_csv_dt <- rbindlist(list(summary_csv_dt, lad_study_age, lad_hw_age), use.names = TRUE)
+setcolorder(summary_csv_dt, c("geo_level", "rgn11cd", "rgn11nm", "lad11cd", "lad11nm", "agegr", "age", "period", "period_label"))
+
 num_cols_sum <- c("estimate", "lower", "upper", "rate", "ratelow", "ratehigh")
-summary_dt[, (num_cols_sum) := lapply(.SD, round, 2), .SDcols = num_cols_sum]
+summary_csv_dt[, (num_cols_sum) := lapply(.SD, round, 2), .SDcols = num_cols_sum]
 csv_summary_path <- file.path(app_data_dir, "summary_estimates.csv")
-fwrite(summary_dt, csv_summary_path)
-cat(sprintf("Saved %s (%d rows, %.2f KB)\n", basename(csv_summary_path), nrow(summary_dt), file.info(csv_summary_path)$size / 1024))
+fwrite(summary_csv_dt, csv_summary_path)
+cat(sprintf("Saved %s (%d rows, %.2f KB)\n", basename(csv_summary_path), nrow(summary_csv_dt), file.info(csv_summary_path)$size / 1024))
 
 ## Export daily_series.csv ----
 cat("Exporting daily_series.csv...\n")
@@ -110,6 +148,14 @@ cat(sprintf("Saved %s (%d features, %.2f MB)\n", basename(geojson_region_path), 
 cat("Exporting geo_lad.geojson...\n")
 geo_lad <- readRDS(file.path(app_data_dir, "geo_lad.rds"))
 geo_lad_export <- geo_lad[, !grepl("^tip_", names(geo_lad))]
+lad_hw_all <- lad_hw_age[agegr == "all"]
+for (hw in c("hw1", "hw2", "hw3", "hw4", "hw5")) {
+  hw_sub <- lad_hw_all[period == hw]
+  idx <- match(geo_lad_export$lad11cd, hw_sub$lad11cd)
+  stopifnot(!anyNA(idx))
+  geo_lad_export[[paste0("estimate_", hw)]] <- round(hw_sub$estimate[idx], 2)
+  geo_lad_export[[paste0("rate_", hw)]]     <- round(hw_sub$rate[idx], 2)
+}
 geojson_lad_path <- file.path(app_data_dir, "geo_lad.geojson")
 st_write(
   geo_lad_export,
@@ -127,6 +173,11 @@ geo_lsoa <- readRDS(file.path(app_data_dir, "geo_lsoa.rds"))
 
 # Exclude heavy pre-rendered HTML tooltip strings to optimize file size for web rendering
 geo_lsoa_export <- geo_lsoa[, !grepl("^tip_", names(geo_lsoa))]
+lsoa_study <- fread("./data/lsoa_study_period.csv")
+idx_lsoa <- match(geo_lsoa_export$lsoa11cd, lsoa_study$LSOA11CD)
+stopifnot(!anyNA(idx_lsoa))
+geo_lsoa_export$estimate_study_period <- round(pmax(lsoa_study$estimate[idx_lsoa], 0), 3)
+geo_lsoa_export$rate_study_period     <- round(pmax(lsoa_study$excess_deaths_per_million[idx_lsoa], 0), 2)
 
 geojson_lsoa_path <- file.path(app_data_dir, "geo_lsoa.geojson")
 st_write(

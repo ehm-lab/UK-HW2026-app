@@ -48,17 +48,17 @@ daily_data = raw_daily.map(d => {
 mutable selected_lad = null
 
 // --- 1.5 Temporal Reactive State ---
-// Sticky heatwave selection preserved when navigating between different LADs.
-mutable selected_hw_period = "HW3: 06 Jul-17 Jul"
+// Unified analysis period selection shared across both England & Wales (LAD) and local area (LSOA) views.
+mutable selected_period = "1 May-30 Sept"
 
-// Derived analysis period: locked to the full study period (1 May–30 September) in the England and Wales overview,
-// and restricted to discrete heatwave episodes (HW1-HW5) when in Small Area Focus.
-active_period = selected_lad === null ? "1 May-30 Sept" : selected_hw_period
+active_period = selected_period
 
 // --- 1.6 Regional and Table Sort State ---
 // Tracks user selection in regional comparison charts and table sorting preferences.
 mutable selected_region = "All"
 mutable selected_region_name = "England & Wales"
+mutable table_tier = "region"
+mutable table_search = ""
 mutable table_sort_col = "rate"
 mutable table_sort_asc = false
 
@@ -82,6 +82,7 @@ selected_lad_meta = {
   if (selected_lad_meta && selected_lad_meta.RGN11CD) {
     mutable selected_region = selected_lad_meta.RGN11CD;
     mutable selected_region_name = selected_lad_meta.RGN11NM;
+    mutable table_tier = "lad";
   } else {
     mutable selected_region = "All";
     mutable selected_region_name = "England & Wales";
@@ -175,9 +176,6 @@ lad_selector = {
   selectEl.addEventListener("change", (e) => {
     const nextVal = e.target.value === "" ? null : e.target.value;
     if (nextVal !== currentLad) {
-      if (currentLad === null && nextVal !== null && !selected_hw_period) {
-        mutable selected_hw_period = "HW3: 06 Jul-17 Jul";
-      }
       mutable selected_lad = nextVal;
     }
   });
@@ -185,72 +183,47 @@ lad_selector = {
   return container;
 }
 
-// --- 2.2 Analysis Period Selector with State Coercion ---
-// Automatically switches between full study period (national view) and heatwaves HW1-HW5 (LSOA view).
+// --- 2.2 Analysis Period Selector ---
+// Allows selecting the full study period (1 May-30 September) or any of the five heatwave episodes (HW1-HW5) in both views.
 period_selector = {
-  const isNational = selected_lad === null;
   const currentPeriod = active_period;
 
-  const hwPeriods = [
-    "HW1: 22 May-28 May",
-    "HW2: 18 Jun-28 Jun",
-    "HW3: 06 Jul-17 Jul",
-    "HW4: 29 Jul-05 Aug",
-    "HW5: 11 Aug-15 Aug"
+  const periodOptions = [
+    { value: "1 May-30 Sept", label: "1 May–30 September (study period)" },
+    { value: "HW1: 22 May-28 May", label: "HW1: 22 May-28 May" },
+    { value: "HW2: 18 Jun-28 Jun", label: "HW2: 18 Jun-28 Jun" },
+    { value: "HW3: 06 Jul-17 Jul", label: "HW3: 06 Jul-17 Jul" },
+    { value: "HW4: 29 Jul-05 Aug", label: "HW4: 29 Jul-05 Aug" },
+    { value: "HW5: 11 Aug-15 Aug", label: "HW5: 11 Aug-15 Aug" }
   ];
 
-  // Visual badge notifying users of LSOA episode constraints
-  const lsoaBadge = !isNational ? html`
-    <span style="font-size: 10px; font-weight: 700; color: #990000; background: #fef2f2; border: 1px solid #fecaca; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;">
-      <i class="bi bi-info-circle-fill" style="color: #990000; font-size: 10px;"></i> Heatwave periods only
-    </span>
-  ` : "";
-
-  // Render period dropdown markup with context-sensitive explanatory note
   const container = html`<div class="ojs-custom-control" style="margin-bottom: 12px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
       <label style="font-size: 12px; font-weight: 700; color: #0f172a; margin: 0;">
         Analysis period
       </label>
-      ${lsoaBadge}
     </div>
     <select
-      style="width: 100%; padding: 6px 8px; font-size: 12.5px; border: 1px solid ${isNational ? '#cbd5e1' : '#94a3b8'}; border-radius: 4px; background: ${isNational ? '#f1f5f9' : '#ffffff'}; color: #0f172a; cursor: ${isNational ? 'not-allowed' : 'pointer'};"
+      style="width: 100%; padding: 6px 8px; font-size: 12.5px; border: 1px solid #94a3b8; border-radius: 4px; background: #ffffff; color: #0f172a; cursor: pointer;"
     ></select>
-    <div style="font-size: 11px; color: ${isNational ? '#475569' : '#7a0000'}; margin-top: 4px; line-height: 1.35;">
-      ${isNational
-        ? "The England and Wales overview shows the full study period (1 May–30 September). Select a local authority to view the five identified heatwave periods."
-        : html`<i class="bi bi-shield-exclamation me-1"></i>The LSOA map shows estimates for the five identified heatwave periods only.`}
+    <div style="font-size: 11px; color: #475569; margin-top: 4px; line-height: 1.35;">
+      Applies to the map, table, and charts across both England &amp; Wales and local authority views.
     </div>
   </div>`;
 
   const selectEl = container.querySelector("select");
-  selectEl.disabled = isNational;
 
-  // Build option list based on whether we are in national or small-area focus mode
-  if (isNational) {
+  for (const p of periodOptions) {
     const opt = document.createElement("option");
-    opt.value = "1 May-30 Sept";
-    opt.textContent = "1 May–30 September (study period)";
-    opt.selected = true;
+    opt.value = p.value;
+    opt.textContent = p.label;
+    opt.selected = (p.value === currentPeriod);
     selectEl.appendChild(opt);
-    selectEl.value = "1 May-30 Sept";
-  } else {
-    for (const p of hwPeriods) {
-      const opt = document.createElement("option");
-      opt.value = p;
-      opt.textContent = p;
-      opt.selected = (p === currentPeriod);
-      selectEl.appendChild(opt);
-    }
-    selectEl.value = currentPeriod;
   }
+  selectEl.value = currentPeriod;
 
-  // Update sticky heatwave state when user changes episode
   selectEl.addEventListener("change", (e) => {
-    if (!isNational) {
-      mutable selected_hw_period = e.target.value;
-    }
+    mutable selected_period = e.target.value;
   });
 
   return container;
@@ -324,36 +297,22 @@ age_group_note = html`<div style="font-size: 11px; color: #475569; margin-top: -
 
 ```{ojs}
 // =============================================================================
-// 3. REACTIVE SMALL AREA (LSOA) DUCKDB QUERY
+// 3. REACTIVE SMALL AREA (LSOA) COUNT DUCKDB QUERY
 // =============================================================================
-// Dynamically queries LSOA estimates from DuckDB for the active district and heatwave.
-// When in national overview mode (selected_lad === null), returns an empty array immediately.
-active_lsoa_data = {
+// Queries distinct LSOA count for the active district regardless of selected period.
+// When in national overview mode (selected_lad === null), returns 0 immediately.
+active_lsoa_count = {
   if (selected_lad === null) {
-    return [];
+    return 0;
   }
   const rows = await db.query(
-    `SELECT
-       LSOA11CD,
-       LSOA11NM,
-       LAD11CD,
-       LAD11NM,
-       RGN11CD,
-       RGN11NM,
-       event,
-       period,
-       start_date,
-       end_date,
-       n_days,
-       population,
-       estimate,
-       rate
+    `SELECT CAST(COUNT(DISTINCT LSOA11CD) AS INTEGER) AS n
      FROM lsoa_hw_period
-     WHERE LAD11CD = ? AND period = ?
-     ORDER BY LSOA11CD ASC`,
-    [selected_lad, active_period]
+     WHERE LAD11CD = ?`,
+    [selected_lad]
   );
-  return Array.from(rows);
+  const first = Array.from(rows)[0];
+  return first ? Number(first.n) : 0;
 }
 ```
 
@@ -389,6 +348,10 @@ helpers = {
     return m ? `hw${m[1]}` : String(p).toLowerCase();
   };
 
+  const formatPeriodShort = (p) => (
+    toPeriodKey(p) === "study_period" ? "1 May–30 September" : String(p)
+  );
+
   // --- 4.3 Safe Number Formatters ---
   // Formats integers and rates with British locale separators and safe fallback for missing values.
   const fmtInt = (x) => (x == null || isNaN(x)) ? "—" : Math.round(Number(x)).toLocaleString("en-GB");
@@ -416,16 +379,25 @@ helpers = {
   }
 
   // --- 4.5 Sequential Color Scales & Bin Thresholds ---
-  // High-contrast ColorBrewer YlOrRd / OrRd stops calibrated separately for LAD vs LSOA scales.
-  function getMapPalette(tier, m) {
+  // High-contrast ColorBrewer YlOrRd / OrRd stops calibrated separately for LAD vs LSOA and season vs heatwave scales.
+  function getMapPalette(tier, m, pKey = "study_period") {
     const stops = ["#fef0d9", "#fdcc8a", "#fc8d59", "#e34a33", "#990000"];
+    const isStudy = (pKey === "study_period");
     let values, title;
     if (m === "rate") {
       title = "Excess deaths per million";
-      values = (tier === "lad") ? [0, 35, 70, 110, 150] : [0, 15, 35, 60, 90];
+      if (tier === "lad") {
+        values = isStudy ? [0, 35, 70, 110, 150] : [0, 10, 20, 35, 55];
+      } else {
+        values = isStudy ? [0, 50, 100, 175, 250] : [0, 15, 35, 60, 90];
+      }
     } else {
       title = "Excess deaths";
-      values = (tier === "lad") ? [0, 5, 15, 30, 55] : [0, 0.05, 0.12, 0.25, 0.5];
+      if (tier === "lad") {
+        values = isStudy ? [0, 5, 15, 30, 55] : [0, 1.5, 4, 8, 15];
+      } else {
+        values = isStudy ? [0, 0.1, 0.2, 0.35, 0.5] : [0, 0.05, 0.12, 0.25, 0.5];
+      }
     }
     return { values, stops, title };
   }
@@ -445,7 +417,7 @@ helpers = {
 
   // --- 4.7 LAD Polygon Hover Tooltip ---
   // Produces HTML tooltip content; adapts message if polygon is currently a clickable neighbor.
-  function formatLadTooltip(props, activeLad, m) {
+  function formatLadTooltip(props, activeLad, m, pStr = "1 May-30 Sept") {
     const ladName = props.lad11nm || "Local Authority";
     const ladCd = props.lad11cd || props.LAD11CD || "";
     const isSmallAreaFocus = (activeLad !== null);
@@ -460,8 +432,9 @@ helpers = {
       `;
     }
 
-    const estVal = props.estimate_study_period;
-    const rateVal = props.rate_study_period;
+    const pKey = toPeriodKey(pStr);
+    const estVal = props[`estimate_${pKey}`];
+    const rateVal = props[`rate_${pKey}`];
     const popVal = props.population;
     return `
       <div style="font-weight:700; font-size:13.5px; color:#0f172a;">${ladName} <span style="font-weight:500; color:#475569;">(${ladCd})</span></div>
@@ -469,23 +442,23 @@ helpers = {
       <div style="font-size:12px;">Excess deaths: <strong>${fmtRate(estVal, 1)}</strong></div>
       <div style="font-size:12px;">Rate per million: <strong>${fmtRate(rateVal, 1)}</strong></div>
       <div style="font-size:11px; color:#990000; font-weight:700; margin-top:4px; border-top:1px solid #e2e8f0; padding-top:3px;">
-        1 May–30 September · Click to view LSOAs
+        ${formatPeriodShort(pStr)} · Click to view LSOAs
       </div>
     `;
   }
 
   // --- 4.8 LSOA Small Area Hover Tooltip ---
-  // Displays fine-grained neighborhood estimates for the active heatwave period.
+  // Displays fine-grained neighborhood estimates for the active analysis period.
   function formatLsoaTooltip(props, m, pStr) {
-    const hwCode = toPeriodKey(pStr);
-    const estVal = props[`estimate_${hwCode}`];
-    const rateVal = props[`rate_${hwCode}`];
+    const pKey = toPeriodKey(pStr);
+    const estVal = props[`estimate_${pKey}`];
+    const rateVal = props[`rate_${pKey}`];
     return `
       <div style="font-weight:700; font-size:13px; color:#0f172a;">${props.lsoa11nm || props.lsoa11cd}</div>
       <div style="font-size:11.5px; color:#334155; margin-bottom:3px;">${props.lad11nm || "—"} · Pop: ${fmtInt(props.population)}</div>
       <div style="font-size:12px;">Excess deaths: <strong>${fmtRate(estVal, 2)}</strong></div>
       <div style="font-size:12px;">Rate per million: <strong>${fmtRate(rateVal, 1)}</strong></div>
-      <div style="font-size:11px; color:#475569; margin-top:4px; border-top:1px solid #e2e8f0; padding-top:3px;">${pStr} · LSOA estimate</div>
+      <div style="font-size:11px; color:#475569; margin-top:4px; border-top:1px solid #e2e8f0; padding-top:3px;">${formatPeriodShort(pStr)} · LSOA estimate</div>
     `;
   }
 
@@ -497,6 +470,7 @@ helpers = {
     periodLabelMap,
     ageLabelMap,
     toPeriodKey,
+    formatPeriodShort,
     fmtInt,
     fmtRate,
     getFeatureBBox,
@@ -569,7 +543,7 @@ viewof map = {
     m.addSource("lad_src", { type: "geojson", data: "app_data/geo_lad.geojson" });
     m.addSource("lsoa_src", { type: "geojson", data: "app_data/geo_lsoa.geojson" });
 
-    const initPal = helpers.getMapPalette("lad", "rate");
+    const initPal = helpers.getMapPalette("lad", "rate", "study_period");
     const initFillExpr = helpers.buildFillExpr("rate_study_period", initPal);
 
     // LSOA polygon fill layer (hidden until an LAD is active)
@@ -631,7 +605,12 @@ viewof map = {
       if (!e.features || !e.features.length) return;
       m.getCanvas().style.cursor = "pointer";
       const props = e.features[0].properties;
-      const content = helpers.formatLadTooltip(props, helpers.activeMapState.selected_lad, helpers.activeMapState.metric);
+      const content = helpers.formatLadTooltip(
+        props,
+        helpers.activeMapState.selected_lad,
+        helpers.activeMapState.metric,
+        helpers.activeMapState.active_period
+      );
       popup.setLngLat(e.lngLat).setHTML(content).addTo(m);
     });
 
@@ -706,9 +685,11 @@ viewof map = {
   const m = map;
   const lad = selected_lad;
   const pStr = active_period;
+  const pKey = helpers.toPeriodKey(pStr);
+  const shortPeriod = helpers.formatPeriodShort(pStr);
   const met = metric;
   const ladGeo = lad_geojson;
-  const lsoas = active_lsoa_data;
+  const numLsoas = active_lsoa_count;
 
   // Update cached state for hover tooltip formatters
   helpers.activeMapState.selected_lad = lad;
@@ -723,19 +704,17 @@ viewof map = {
       scopeBarEl.innerHTML = `
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e;"></span>
-          <span><strong>Viewing:</strong> England and Wales (348 LADs) — <span style="color: #cbd5e1;">Click a district to view its LSOAs</span></span>
+          <span><strong>Viewing:</strong> England and Wales (348 LADs) | <span style="color: #fca5a5; font-weight: 600;">${shortPeriod}</span> <span style="color: #cbd5e1;">· Click a district for LSOAs</span></span>
         </div>
       `;
     } else {
       const ladName = selected_lad_meta ? selected_lad_meta.LAD11NM : lad;
-      const numLsoas = (lsoas && Array.isArray(lsoas)) ? lsoas.length : 0;
-      const lsoaCountText = numLsoas > 0 ? `${numLsoas}` : "";
-      const lsoaLabel = lsoaCountText ? `(${lsoaCountText} LSOAs)` : "(LSOAs)";
+      const lsoaLabel = numLsoas > 0 ? `(${numLsoas} LSOAs)` : "(LSOAs)";
       scopeBarEl.innerHTML = `
         <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 14px;">
           <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
             <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #f59e0b;"></span>
-            <span><strong>Viewing:</strong> ${ladName} ${lsoaLabel} | <span style="color: #fca5a5; font-weight: 600;">${pStr}</span></span>
+            <span><strong>Viewing:</strong> ${ladName} ${lsoaLabel} | <span style="color: #fca5a5; font-weight: 600;">${shortPeriod}</span></span>
           </div>
           <button id="btn-back-to-lads" class="btn-back-to-lads" title="Return to all 348 LADs in England and Wales">
             × Back to all LADs
@@ -773,9 +752,9 @@ viewof map = {
 
     // --- 6.3 Dynamic Choropleth Filtering & Layer Styling ---
     if (isNational) {
-      // National Overview Mode: 348 LADs colored by study period metric
-      const pal = helpers.getMapPalette("lad", met);
-      const colName = (met === "rate") ? "rate_study_period" : "estimate_study_period";
+      // National Overview Mode: 348 LADs colored by active period metric
+      const pal = helpers.getMapPalette("lad", met, pKey);
+      const colName = (met === "rate") ? `rate_${pKey}` : `estimate_${pKey}`;
       const fillExpr = helpers.buildFillExpr(colName, pal);
 
       m.setLayoutProperty("lad_fill_layer", "visibility", "visible");
@@ -791,10 +770,9 @@ viewof map = {
       m.setFilter("lad_selected_outline", ["==", ["get", "lad11cd"], ""]);
     } else {
       // Small Area Focus Mode:
-      // (a) Render fine-grained LSOAs inside the active LAD, colored by heatwave-specific estimates
-      const hwCode = helpers.toPeriodKey(pStr);
-      const lsoaPal = helpers.getMapPalette("lsoa", met);
-      const lsoaCol = (met === "rate") ? `rate_${hwCode}` : `estimate_${hwCode}`;
+      // (a) Render fine-grained LSOAs inside the active LAD, colored by active period estimates
+      const lsoaPal = helpers.getMapPalette("lsoa", met, pKey);
+      const lsoaCol = (met === "rate") ? `rate_${pKey}` : `estimate_${pKey}`;
       const lsoaFillExpr = helpers.buildFillExpr(lsoaCol, lsoaPal);
 
       m.setLayoutProperty("lsoa_fill_layer", "visibility", "visible");
@@ -817,16 +795,16 @@ viewof map = {
   }
 
   // --- 6.4 Floating Map Legend ---
-  // Dynamically renders the color gradient bar and numerical scale corresponding to active scale & metric
+  // Dynamically renders the color gradient bar and numerical scale corresponding to active scale, metric, & period
   const isNational = (lad === null);
-  const pal = helpers.getMapPalette(isNational ? "lad" : "lsoa", met);
+  const pal = helpers.getMapPalette(isNational ? "lad" : "lsoa", met, pKey);
   const gradStops = pal.stops.map((c, i) => `${c} ${Math.round((i / (pal.stops.length - 1)) * 100)}%`).join(", ");
   const legendEl = document.getElementById("map-legend");
   if (legendEl) {
     legendEl.innerHTML = `
       <div style="font-weight: 700; color: #0f172a; margin-bottom: 2px;">${pal.title}</div>
       <div style="font-size: 10.5px; color: #334155; margin-bottom: 5px;">
-        ${isNational ? "1 May–30 September · 348 LADs" : `${pStr} · LSOAs`}
+        ${isNational ? `${shortPeriod} · 348 LADs` : `${shortPeriod} · LSOAs`}
       </div>
       <div style="height: 12px; border-radius: 3px; background: linear-gradient(to right, ${gradStops}); border: 1px solid #475569;"></div>
       <div style="display: flex; justify-content: space-between; color: #0f172a; font-size: 11px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums;">
@@ -861,32 +839,62 @@ viewof map = {
 
 ```{ojs}
 // =============================================================================
-// 10. INTERACTIVE SORTABLE SUMMARY DATA TABLE & CSV EXPORT
+// 10. INTERACTIVE SORTABLE SUMMARY DATA TABLE (REGIONS & LADS) & CSV EXPORT
 // =============================================================================
-// Presents detailed regional and national epidemiological estimates with inline bars,
-// multi-column sorting (retaining national benchmark row pinned at the top), and one-click CSV export.
+// Presents National, Regional, and Local Authority (LAD) epidemiological estimates
+// across age groups and heatwave periods, with a Regions | LADs toggle, automatic
+// hierarchy drilldown, pinned benchmark rows, instant search, and one-click CSV export.
 {
-  const { period: p, age_group: targetAge, region: sel_rgn, regionName } = state;
+  const { period: p, age_group: targetAge, region: sel_rgn, regionName, selected_lad: activeLad } = state;
+  const tier = table_tier;
   const sortCol = table_sort_col;
   const sortAsc = table_sort_asc;
 
-  // --- 10.1 Filter Data by Period, Age, and Regional Focus ---
-  let data = summary_data.filter(x => x.period === p && x.agegr === targetAge);
-  if (sel_rgn !== "All") {
-    data = data.filter(x => x.geo_level === "national" || (x.geo_level === "region" && x.rgn11cd === sel_rgn));
+  // --- 10.1 Filter Data by Period, Age, Tier, and Regional Focus ---
+  const slice = summary_data.filter(x => x.period === p && x.agegr === targetAge);
+  const natRows = slice.filter(x => x.geo_level === "national");
+  const allRgnRows = slice.filter(x => x.geo_level === "region");
+  const allLadRows = slice.filter(x => x.geo_level === "lad");
+  const scopedLadRows = (sel_rgn !== "All")
+    ? allLadRows.filter(x => x.rgn11cd === sel_rgn)
+    : allLadRows;
+
+  let data = [];
+  if (tier === "region") {
+    const rgnRows = (sel_rgn !== "All")
+      ? allRgnRows.filter(x => x.rgn11cd === sel_rgn)
+      : allRgnRows;
+    data = [...natRows, ...rgnRows];
+  } else {
+    const pinnedRgn = (sel_rgn !== "All")
+      ? allRgnRows.filter(x => x.rgn11cd === sel_rgn)
+      : [];
+    data = [...natRows, ...pinnedRgn, ...scopedLadRows];
   }
 
-  // --- 10.2 Multi-Column Sorting with Pinned National Row ---
+  // --- 10.2 Multi-Column Sorting with Pinned Benchmark Hierarchy ---
+  const getDisplayName = (r) => r.geo_level === "national" ? "England and Wales" : r.geo_level === "lad" ? (r.lad11nm || "") : (r.rgn11nm || "");
+  const getPinRank = (r) => {
+    if (r.geo_level === "national") return 0;
+    if (r.geo_level === "region" && tier === "lad") return 1;
+    if (r.geo_level === "lad" && activeLad && (r.lad11cd || "").toUpperCase() === activeLad.toUpperCase()) return 2;
+    return 3;
+  };
+
   data = data.slice().sort((a, b) => {
-    // Keep National benchmark row pinned at the top when viewing all regions
-    if (a.geo_level !== b.geo_level) return a.geo_level === "national" ? -1 : 1;
-    const va = a[sortCol], vb = b[sortCol];
-    const cmp = (typeof va === "string") ? va.localeCompare(vb) : (va - vb);
+    const rankA = getPinRank(a), rankB = getPinRank(b);
+    if (rankA !== rankB) return rankA - rankB;
+    const va = (sortCol === "rgn11nm") ? getDisplayName(a) : a[sortCol];
+    const vb = (sortCol === "rgn11nm") ? getDisplayName(b) : b[sortCol];
+    const cmp = (typeof va === "string") ? va.localeCompare(vb) : ((va || 0) - (vb || 0));
     return sortAsc ? cmp : -cmp;
   });
 
   // Calculate maximum values for inline proportional bar chart widths
-  const maxEst = Math.max(...data.map(d => d.estimate || 0), 1);
+  // In LAD mode, scale LAD bars against max LAD estimate (and rate across all rows) so LAD bars remain legible
+  const ladOnly = data.filter(d => d.geo_level === "lad");
+  const maxEstNatRgn = Math.max(...data.filter(d => d.geo_level !== "lad").map(d => d.estimate || 0), 1);
+  const maxEstLad = Math.max(...ladOnly.map(d => d.estimate || 0), 1);
   const maxRate = Math.max(...data.map(d => d.rate || 0), 1);
 
   // --- 10.3 Column Header Click-Sort Helper ---
@@ -901,11 +909,47 @@ viewof map = {
 
   const sortIndicator = (col) => (sortCol === col) ? (sortAsc ? " ▲" : " ▼") : "";
 
-  // --- 10.4 In-Browser Dynamic CSV Exporter ---
-  // Constructs a CSV file from current filtered table rows and triggers an immediate browser download
+  // --- 10.4 Tier Toggle, Region Filter Pill & Search Input ---
+  const btnRegion = html`<button type="button" style="padding: 3px 9px; font-size: 11px; font-weight: 700; border: 1px solid ${tier === 'region' ? '#990000' : '#cbd5e1'}; background: ${tier === 'region' ? '#990000' : '#ffffff'}; color: ${tier === 'region' ? '#ffffff' : '#334155'}; border-radius: 4px 0 0 4px; cursor: pointer;">Regions (${sel_rgn === 'All' ? allRgnRows.length : 1})</button>`;
+  const btnLad = html`<button type="button" style="padding: 3px 9px; font-size: 11px; font-weight: 700; border: 1px solid ${tier === 'lad' ? '#990000' : '#cbd5e1'}; border-left: none; background: ${tier === 'lad' ? '#990000' : '#ffffff'}; color: ${tier === 'lad' ? '#ffffff' : '#334155'}; border-radius: 0 4px 4px 0; cursor: pointer;">LADs (${scopedLadRows.length})</button>`;
+
+  btnRegion.onclick = () => { mutable table_tier = "region"; };
+  btnLad.onclick = () => { mutable table_tier = "lad"; };
+
+  const regionPill = (sel_rgn !== "All") ? html`
+    <button type="button" title="Clear regional filter and show all England & Wales" style="padding: 2px 7px; font-size: 10.5px; font-weight: 700; background: #fef2f2; color: #990000; border: 1px solid #fecaca; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+      <span>${regionName}</span>
+      <span style="font-size: 12px; line-height: 1;">×</span>
+    </button>
+  ` : "";
+  if (regionPill) {
+    regionPill.onclick = () => {
+      if (activeLad !== null) {
+        mutable selected_lad = null;
+      } else {
+        mutable selected_region = "All";
+        mutable selected_region_name = "England & Wales";
+      }
+    };
+  }
+
+  const searchInput = (tier === "lad") ? html`
+    <input
+      type="search"
+      placeholder="Filter ${scopedLadRows.length} LADs..."
+      value="${window._tableLadSearch || ''}"
+      style="padding: 2px 8px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; width: 145px; color: #0f172a;"
+    />
+  ` : "";
+
+  // --- 10.5 In-Browser Dynamic CSV Exporter ---
   const downloadCsv = () => {
-    const headers = ["geo_level", "rgn11cd", "rgn11nm", "period", "period_label", "agegr", "age", "population", "estimate", "lower", "upper", "rate", "ratelow", "ratehigh"];
-    const csvRows = data.map(row => headers.map(h => {
+    const q = (tier === "lad" && window._tableLadSearch) ? window._tableLadSearch.trim().toLowerCase() : "";
+    const exportRows = q
+      ? data.filter(r => r.geo_level !== "lad" || `${r.lad11nm} ${r.lad11cd} ${r.rgn11nm}`.toLowerCase().includes(q))
+      : data;
+    const headers = ["geo_level", "rgn11cd", "rgn11nm", "lad11cd", "lad11nm", "period", "period_label", "agegr", "age", "population", "estimate", "lower", "upper", "rate", "ratelow", "ratehigh"];
+    const csvRows = exportRows.map(row => headers.map(h => {
       let v = row[h];
       if (typeof v === "string" && v.includes(",")) v = `"${v}"`;
       return v ?? "";
@@ -914,28 +958,35 @@ viewof map = {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `UK_Heatwave_2026_${p}_${targetAge}.csv`;
+    a.download = `UK_Heatwave_2026_${tier}_${p}_${targetAge}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const exportBtn = html`<button style="padding: 3px 10px; font-size: 11px; background: #ffffff; border: 1px solid #990000; border-radius: 4px; cursor: pointer; color: #990000; font-weight: 700;">⬇ Export CSV</button>`;
+  const exportBtn = html`<button type="button" style="padding: 3px 9px; font-size: 11px; background: #ffffff; border: 1px solid #990000; border-radius: 4px; cursor: pointer; color: #990000; font-weight: 700; white-space: nowrap;">⬇ Export CSV</button>`;
   exportBtn.onclick = downloadCsv;
 
-  // --- 10.5 Clickable Table Headers ---
-  const thGeo = html`<th>Geography${sortIndicator("rgn11nm")}</th>`; thGeo.onclick = setSort("rgn11nm");
+  // --- 10.6 Clickable Table Headers ---
+  const thGeo = html`<th>${tier === "lad" ? "Local authority / benchmark" : "Geography"}${sortIndicator("rgn11nm")}</th>`; thGeo.onclick = setSort("rgn11nm");
   const thPop = html`<th style="text-align: right;">Population${sortIndicator("population")}</th>`; thPop.onclick = setSort("population");
-  const thEst = html`<th style="min-width: 155px;">Excess deaths [95% eCI]${sortIndicator("estimate")}</th>`; thEst.onclick = setSort("estimate");
-  const thRate = html`<th style="min-width: 155px;">Rate per million [95% eCI]${sortIndicator("rate")}</th>`; thRate.onclick = setSort("rate");
+  const thEst = html`<th style="min-width: 155px;">${tier === "lad" ? "Excess deaths" : "Excess deaths [95% eCI]"}${sortIndicator("estimate")}</th>`; thEst.onclick = setSort("estimate");
+  const thRate = html`<th style="min-width: 155px;">${tier === "lad" ? "Rate per million" : "Rate per million [95% eCI]"}${sortIndicator("rate")}</th>`; thRate.onclick = setSort("rate");
 
-  // --- 10.6 Assemble Final HTML Table with Inline Bars ---
-  return html`
+  // --- 10.7 Assemble Final HTML Table with Inline Bars ---
+  const wrapper = html`
     <div style="display: flex; flex-direction: column; height: 100%;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-        <span style="font-size: 11.5px; color: #0f172a; font-weight: 600;">
-          <strong>${helpers.periodLabelMap[p]}</strong> · ${helpers.ageLabelMap[targetAge]} (${data.length} rows)
-        </span>
-        ${exportBtn}
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 6px;">
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <div style="display: inline-flex;">${btnRegion}${btnLad}</div>
+          ${regionPill}
+          <span style="font-size: 11px; color: #334155; font-weight: 600;">
+            ${helpers.periodLabelMap[p]} · ${helpers.ageLabelMap[targetAge]}
+          </span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          ${searchInput}
+          ${exportBtn}
+        </div>
       </div>
 
       <div style="overflow-y: auto; flex: 1; border: 1px solid #cbd5e1; border-radius: 6px;">
@@ -951,17 +1002,50 @@ viewof map = {
           <tbody>
             ${data.map(r => {
               const isNat = r.geo_level === "national";
-              const geoName = isNat ? "England and Wales" : r.rgn11nm;
-              const estPct = Math.min(100, Math.max(0, ((r.estimate || 0) / maxEst) * 100)).toFixed(1);
+              const isRgn = r.geo_level === "region";
+              const isLad = r.geo_level === "lad";
+              const isActiveLad = isLad && activeLad && (r.lad11cd || "").toUpperCase() === activeLad.toUpperCase();
+
+              const denomEst = isLad ? maxEstLad : maxEstNatRgn;
+              const estPct = Math.min(100, Math.max(0, ((r.estimate || 0) / denomEst) * 100)).toFixed(1);
               const ratePct = Math.min(100, Math.max(0, ((r.rate || 0) / maxRate) * 100)).toFixed(1);
-              const estText = `${helpers.fmtInt(r.estimate)} [${helpers.fmtInt(r.lower)} – ${helpers.fmtInt(r.upper)}]`;
-              const rateText = `${helpers.fmtRate(r.rate, 1)} [${helpers.fmtRate(r.ratelow, 1)} – ${helpers.fmtRate(r.ratehigh, 1)}]`;
+
+              const hasCI = r.lower != null && r.upper != null && !isNaN(r.lower) && !isNaN(r.upper);
+              const estText = hasCI
+                ? `${helpers.fmtInt(r.estimate)} [${helpers.fmtInt(r.lower)} – ${helpers.fmtInt(r.upper)}]`
+                : `${helpers.fmtRate(r.estimate, 1)}`;
+              const rateText = hasCI
+                ? `${helpers.fmtRate(r.rate, 1)} [${helpers.fmtRate(r.ratelow, 1)} – ${helpers.fmtRate(r.ratehigh, 1)}]`
+                : `${helpers.fmtRate(r.rate, 1)}`;
+
+              const rowClass = isNat
+                ? "row-national"
+                : (isRgn && tier === "lad")
+                  ? "row-region-pinned"
+                  : isActiveLad
+                    ? "row-lad-active"
+                    : "";
+
+              const badgeClass = isNat ? "scope-national" : isRgn ? "scope-region" : "scope-lad";
+              const badgeLabel = isNat ? "NAT" : isRgn ? "RGN" : "LAD";
+              const titleName = isNat ? "England and Wales" : isLad ? r.lad11nm : r.rgn11nm;
+              const subMeta = isLad
+                ? html`<span style="font-size: 10.5px; color: #64748b; font-weight: 400; margin-left: 4px;">${r.rgn11nm}</span>`
+                : (isRgn && tier === "region")
+                  ? html`<span style="font-size: 10px; color: #64748b; font-weight: 400; margin-left: 4px;">→ LADs</span>`
+                  : "";
 
               const rowEl = html`
-                <tr class="${isNat ? "row-national" : ""}" style="cursor: pointer;" title="Click to select ${geoName}">
+                <tr
+                  class="${rowClass}"
+                  data-lad-search="${isLad ? `${r.lad11nm} ${r.lad11cd} ${r.rgn11nm}`.toLowerCase() : ''}"
+                  style="cursor: pointer;"
+                  title="${isNat ? 'Click to reset to England and Wales overview' : isRgn ? `Click to filter ${r.rgn11nm} and inspect its LADs` : `Click to focus map on ${r.lad11nm} (${r.lad11cd})`}"
+                >
                   <td>
-                    <span class="scope-badge ${isNat ? "scope-national" : "scope-region"}">${isNat ? "NAT" : "RGN"}</span>
-                    <strong>${geoName}</strong>
+                    <span class="scope-badge ${badgeClass}">${badgeLabel}</span>
+                    <strong>${titleName}</strong>
+                    ${subMeta}
                   </td>
                   <td style="text-align: right; font-variant-numeric: tabular-nums;">${helpers.fmtInt(r.population)}</td>
                   <td>
@@ -978,13 +1062,29 @@ viewof map = {
                   </td>
                 </tr>
               `;
+
               rowEl.onclick = () => {
                 if (isNat) {
+                  mutable selected_lad = null;
                   mutable selected_region = "All";
                   mutable selected_region_name = "England & Wales";
-                } else {
-                  mutable selected_region = r.rgn11cd;
-                  mutable selected_region_name = r.rgn11nm;
+                } else if (isRgn) {
+                  if (tier === "region") {
+                    mutable selected_region = r.rgn11cd;
+                    mutable selected_region_name = r.rgn11nm;
+                    mutable table_tier = "lad";
+                  } else if (activeLad !== null) {
+                    mutable selected_lad = null;
+                  } else {
+                    mutable selected_region = "All";
+                    mutable selected_region_name = "England & Wales";
+                  }
+                } else if (isLad) {
+                  if (isActiveLad) {
+                    mutable selected_lad = null;
+                  } else {
+                    mutable selected_lad = r.lad11cd;
+                  }
                 }
               };
               return rowEl;
@@ -992,8 +1092,30 @@ viewof map = {
           </tbody>
         </table>
       </div>
+      ${tier === "lad" ? html`
+        <div style="font-size: 10.5px; color: #475569; margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
+          <span><i class="bi bi-info-circle me-1"></i><strong>Pinned rows:</strong> National/Region benchmarks include 95% eCIs; LAD rows show point estimates for the active age group &amp; period. Click any LAD row to zoom map.</span>
+        </div>
+      ` : ""}
     </div>
   `;
+
+  if (searchInput) {
+    const applyFilter = (val) => {
+      window._tableLadSearch = val;
+      const q = val.trim().toLowerCase();
+      const rows = wrapper.querySelectorAll("tbody tr[data-lad-search]");
+      for (const tr of rows) {
+        const attr = tr.getAttribute("data-lad-search");
+        if (!attr) continue; // Keep pinned NAT / RGN benchmark rows visible
+        tr.style.display = (!q || attr.includes(q)) ? "" : "none";
+      }
+    };
+    if (window._tableLadSearch) applyFilter(window._tableLadSearch);
+    searchInput.addEventListener("input", (e) => applyFilter(e.target.value));
+  }
+
+  return wrapper;
 }
 ```
 
@@ -1097,6 +1219,7 @@ viewof map = {
     if (pt && pt.code) {
       mutable selected_region = pt.code;
       mutable selected_region_name = pt.name;
+      mutable table_tier = "lad";
     }
   });
 
@@ -1347,7 +1470,7 @@ The dashboard presents **modelled estimates of heat-related excess mortality**, 
 
 **Data availability**
 
-The summary table and CSV download contain England-and-Wales-level and regional results. Selecting a local authority changes the map but not the table or download. Detailed LAD- and LSOA-level outputs and the analysis code are available in the [study repository](https://github.com/ehm-lab/UK-HW2026).
+The summary table and CSV download contain England-and-Wales-level, regional, and local authority (LAD) results. Detailed LAD- and LSOA-level outputs and the analysis code are available in the [study repository](https://github.com/ehm-lab/UK-HW2026).
 
 **Key findings**
 
@@ -1356,4 +1479,3 @@ The summary table and CSV download contain England-and-Wales-level and regional 
 - **Older age groups:** People aged 75 years and over accounted for an estimated **4,408 deaths (75.7%)** (95% eCI: 3,367–5,334), while representing 8.7% of the population used in the analysis.
 - **Peak daily estimates:** The highest modelled daily totals were on 26 June (**409 deaths**; 95% eCI: 306–475) and 13 August (**405 deaths**; 95% eCI: 276–479).
 - **Regional variation:** All-age rates per million were highest in the West Midlands (**133.9**), South East (**133.0**) and London (**132.4**), and lowest in the North East (**41.7**).
-
